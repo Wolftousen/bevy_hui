@@ -26,3 +26,7 @@ path = "src/ui.rs"
 [[bin]]
 name = "animation"
 path = "src/animation.rs"
+
+[[bin]]
+name = "data"
+path = "src/data.rs"
