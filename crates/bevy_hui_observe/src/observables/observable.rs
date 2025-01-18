@@ -1,10 +1,11 @@
 #![allow(dead_code)]
 
-use core::any::Any;
 use bevy::{ecs::system::IntoObserverSystem, prelude::*, utils::HashMap};
 
+use super::HuiObservableType;
+
 #[derive(Resource, Default, Deref, DerefMut)]
-pub struct HuiObservableProperties(HashMap<String, Box<dyn Any + Send + Sync + 'static>>);
+pub struct HuiObservableProperties(HashMap<String, Box<dyn HuiObservableType>>);
 
 impl HuiObservableProperties {
     fn register<E: Event, B: Bundle, M, I: IntoObserverSystem<E, B, M>>(&mut self, key: impl Into<String>, system: impl IntoObserverSystem<E, B, M>)

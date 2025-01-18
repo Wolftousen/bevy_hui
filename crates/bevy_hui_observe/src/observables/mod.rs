@@ -28,6 +28,11 @@ pub enum HuiObservationValue {
     FocusPolicy(FocusPolicy),
 }
 
+pub trait HuiObservableType: Sync + Send + 'static {
+    fn observe(entity_commands: &mut EntityCommands)
+    where Self: Sized;
+}
+
 #[derive(Event)]
 pub struct HuiObservationEvent<T> {
     _marker: core::marker::PhantomData<T>,
