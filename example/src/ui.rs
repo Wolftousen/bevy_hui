@@ -66,6 +66,7 @@ fn setup(
                 .map(|s| Animation::tag(s))
                 .unwrap_or(Animation::default());
 
+
             cmd.entity(entity).insert(AseUiAnimation {
                 aseprite: server.load(ase_path),
                 animation,
@@ -74,7 +75,7 @@ fn setup(
     );
 
     // register custom node by passing a template handle
-    html_comps.register_with_spawn_fn("panel", server.load("demo/panel.html"), |mut cmd, _| {
+    html_comps.register_with_spawn_fn("panel", server.load("demo/panel.html"), |mut cmd| {
         cmd.insert(Name::new("Panel"));
     });
 
@@ -97,7 +98,6 @@ fn setup(
 
             let rng = rand::random::<u32>();
             props.insert("title".to_string(), format!("{}", rng));
-            cmd.trigger_targets(CompileContextEvent, **scope);
         },
     );
 }
@@ -185,7 +185,7 @@ fn update_puls(mut query: Query<(&mut Node, &Puls)>, time: Res<Time>, mut elapse
 
 fn init_inventory(In(entity): In<Entity>, mut cmd: Commands, server: Res<AssetServer>) {
     cmd.entity(entity).with_children(|cmd| {
-        for i in 0..200 {
+        for i in 0..10 {
             cmd.spawn((
                 HtmlNode(server.load("demo/card.html")),
                 TemplateProperties::default()

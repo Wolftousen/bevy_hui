@@ -1,18 +1,18 @@
 use crate::{
-    animation::{AnimationDirection, ActiveAnimation}, compile::CompileContextEvent, data::{AttrTokens, HtmlTemplate, NodeType, XNode}, prelude::ComponentBindings, styles::{HoverTimer, HtmlStyle, PressedTimer}, util::SlotId
+    animation::{ActiveAnimation, AnimationDirection}, data::{AttrTokens, Attribute, HtmlTemplate, NodeType, XNode}, prelude::ComponentBindings, styles::{HoverTimer, HtmlStyle, PressedTimer}, util::SlotId
 };
 use bevy::{prelude::*, utils::HashMap};
 use nom::{
-    bytes::complete::{is_not, tag, take_until},
-    character::complete::multispace0,
-    sequence::{delimited, preceded, tuple},
+    bytes::complete::{is_not, tag, take_until}, character::complete::multispace0, multi::many0, sequence::{delimited, preceded, tuple}, IResult
 };
 use std::time::Duration;
 
+/// holds a parsed template
+/// can be build as UI.
 pub struct BuildPlugin;
 impl Plugin for BuildPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (hotreload, spawn_ui, move_children_to_slot).chain())
+        app.add_systems(Update, (hotreload, spawn_ui).chain())
             .register_type::<TemplatePropertySubscriber>()
             .register_type::<TemplateExpresions>()
             .register_type::<TemplateProperties>()
@@ -35,6 +35,9 @@ impl Plugin for BuildPlugin {
     }
 }
 
+#[derive(Component, Deref, DerefMut)]
+pub struct TemplateContent(pub String);
+
 /// Holds the reference to the template root entity,
 /// which owns the template properties
 #[derive(Component, Clone, Deref, Debug, DerefMut, Copy, Reflect)]
@@ -53,6 +56,12 @@ impl TemplateProperties {
     pub fn with(mut self, key: &str, value: &str) -> Self {
         self.insert(key.to_string(), value.to_string());
         self
+    }
+}
+
+impl From<HashMap<String, String>> for TemplateProperties {
+    fn from(map: HashMap<String, String>) -> Self {
+        TemplateProperties(map) // No clone or copy here, direct move
     }
 }
 
@@ -198,43 +207,6 @@ struct KeepComps {
     pub scope: TemplateScope,
 }
 
-fn move_children_to_slot(
-    mut cmd: Commands,
-    unsloted_includes: Query<(Entity, &UnslotedChildren)>,
-    children: Query<&Children>,
-    slots: Query<(Entity, &SlotPlaceholder)>,
-    parent: Query<&Parent>,
-) {
-    unsloted_includes
-        .iter()
-        .for_each(|(entity, UnslotedChildren(slot_holder))| {
-            let Some(placeholder_entity) = slots
-                .iter()
-                .find_map(|(slot_ent, slot)| (slot.owner == entity).then_some(slot_ent))
-            else {
-                return;
-            };
-
-            let Ok(slot_parent) = parent.get(placeholder_entity).map(|p| p.get()) else {
-                error!("parentless slot, impossible");
-                return;
-            };
-
-            _ = children.get(*slot_holder).map(|children| {
-                children.iter().for_each(|child| {
-                    if *child != slot_parent {
-                        cmd.entity(*child).insert(InsideSlot { owner: entity });
-                        cmd.entity(slot_parent).add_child(*child);
-                    }
-                })
-            });
-
-            cmd.entity(entity).remove::<UnslotedChildren>();
-            cmd.entity(placeholder_entity).despawn_recursive();
-            cmd.entity(*slot_holder).despawn();
-        });
-}
-
 fn spawn_ui(
     mut cmd: Commands,
     mut unbuild: Query<(Entity, &HtmlNode, &mut TemplateProperties), Without<FullyBuild>>,
@@ -245,28 +217,27 @@ fn spawn_ui(
 ) {
     unbuild
         .iter_mut()
-        .for_each(|(root_entity, handle, mut state)| {
+        .for_each(|(root_entity, handle, mut properties)| {
             let Some(template) = assets.get(&**handle) else {
                 return;
             };
 
             template.properties.iter().for_each(|(key, val)| {
-                _ = state.try_insert(key.to_owned(), val.clone());
+                _ = properties.try_insert(key.to_owned(), val.clone());
             });
 
             let mut builder = TemplateBuilder::new(
-                root_entity,
                 cmd.reborrow(),
+                &assets,
                 &server,
                 &mut texture_atlases,
                 &custom_comps,
-                &template,
             );
 
             if let Some(node) = template.root.first() {
-                builder.build_tree(node);
-                builder.finalize_relations();
-                cmd.trigger_targets(CompileContextEvent, root_entity);
+                let mut state = TemplateBuilderState::new(root_entity, template, &node.children, &properties);
+
+                builder.build_tree(node, &mut state);
             } else {
                 warn!("template has no root node!");
             }
@@ -316,57 +287,78 @@ fn build_animation(style: &HtmlStyle) -> Option<ActiveAnimation> {
 
 struct TemplateBuilder<'w, 's> {
     cmd: Commands<'w, 's>,
+    assets: &'w Assets<HtmlTemplate>,
     server: &'w AssetServer,
     texture_atlases: &'w mut Assets<TextureAtlasLayout>,
-    scope: Entity,
     comps: &'w ComponentBindings,
     subscriber: TemplatePropertySubscriber,
+}
+
+struct TemplateBuilderState<'w> {
+    scope: Entity,
+    template: &'w HtmlTemplate,
     ids: HashMap<String, Entity>,
     targets: HashMap<Entity, String>,
     watch: HashMap<String, Vec<Entity>>,
-    template: &'w HtmlTemplate,
+    slottable_contents: Option<&'w Vec<XNode>>,
+    properties: &'w TemplateProperties,
+}
+
+impl<'w> TemplateBuilderState<'w> {
+    pub fn new(scope: Entity, template: &'w HtmlTemplate, slottable_contents: &'w Vec<XNode>, properties: &'w TemplateProperties) -> Self {
+        let contents = if slottable_contents.len() > 0 {
+            Some(slottable_contents)
+        } else {
+            None
+        };
+
+        Self {
+            scope,
+            template,
+            ids: Default::default(),
+            targets: Default::default(),
+            watch: Default::default(),
+            slottable_contents: contents,
+            properties,
+        }
+    }
 }
 
 impl<'w, 's> TemplateBuilder<'w, 's> {
     pub fn new(
-        scope: Entity,
         cmd: Commands<'w, 's>,
+        assets: &'w Assets<HtmlTemplate>,
         server: &'w AssetServer,
         texture_atlases: &'w mut Assets<TextureAtlasLayout>,
         comps: &'w ComponentBindings,
-        template: &'w HtmlTemplate,
     ) -> Self {
         Self {
             cmd,
-            scope,
+            assets,
             server,
             texture_atlases,
             comps,
-            template,
             subscriber: Default::default(),
-            ids: Default::default(),
-            targets: Default::default(),
-            watch: Default::default(),
         }
     }
 
-    pub fn finalize_relations(mut self) {
-        self.ids.iter().for_each(|(id_string, entity)| {
+    pub fn finalize_relations(&mut self, state: &TemplateBuilderState) {
+        state.ids.iter().for_each(|(id_string, entity)| {
             self.cmd.entity(*entity).insert(UiId(id_string.clone()));
         });
 
-        self.targets
+        state.targets
             .iter()
-            .for_each(|(entity, target_id)| match self.ids.get(target_id) {
+            .for_each(|(entity, target_id)| match state.ids.get(target_id) {
                 Some(tar) => {
                     self.cmd.entity(*entity).insert(UiTarget(*tar));
                 }
                 None => warn!("target `{target_id}` not found for entity {entity}"),
             });
 
-        self.watch
+            state.watch
             .iter()
-            .for_each(|(target_str, obs_list)| match self.ids.get(target_str) {
+            .for_each(|(target_str, obs_list)| match state.ids.get(target_str) {
                 Some(to_observe) => {
                     self.cmd
                         .entity(*to_observe)
@@ -376,21 +368,58 @@ impl<'w, 's> TemplateBuilder<'w, 's> {
             });
 
         self.cmd
-            .entity(self.scope)
+            .entity(state.scope)
             .insert((std::mem::take(&mut self.subscriber), FullyBuild));
     }
 
-    pub fn build_tree(&mut self, root: &XNode) {
-        self.build_node(self.scope, root);
+    pub fn build_tree(&mut self, root: &XNode, state: &mut TemplateBuilderState) {
+        self.build_node(state.scope, root, state);
+        self.finalize_relations(&state);
     }
 
-    fn build_node(&mut self, entity: Entity, node: &XNode) {
-        let styles = HtmlStyle::from(node.styles.clone());
+    fn fill_attr_tokens(&mut self, entity: Entity, node: &XNode, properties: &TemplateProperties, style: &mut HtmlStyle, tags: &mut Tags) -> Option<String> {
+        let mut path: Option<String> = None;
+
+        for attr in node.uncompiled.iter() {
+            if let Some(attr) = attr.compile(properties) {
+                match attr {
+                    Attribute::Style(style_attr) => {
+                        style.add_style_attr(style_attr);
+                    }
+                    Attribute::Action(action) => {
+                        action.self_insert(self.cmd.entity(entity))
+                    }
+                    Attribute::Path(p) => {
+                        path = Some(p);
+                    }
+                    Attribute::Tag(key, value) => {
+                        tags.insert(key, value);
+                    }
+                    rest => {
+                        warn!("attribute of this kind cannot be dynamic `{:?}`", rest);
+                    }
+                }
+            }
+        }
+
+        return path;
+    }
+
+    fn build_basic_node(&mut self, entity: Entity, node: &XNode, state: &TemplateBuilderState) {
+        let mut styles = HtmlStyle::from(node.styles.clone());
+        let mut tags = Tags(node.tags.clone());
+
+        let path = self.fill_attr_tokens(entity, node, state.properties, &mut styles, &mut tags);
+
+        let mut bundle = self.cmd.entity(entity);
+
+        //insert base node for styling
+        bundle.insert(styles.computed.node.clone());
 
         // ----------------------
         // timers
-        self.cmd
-            .entity(entity)
+        //todo: these should be optional and only set if set in the template
+        bundle
             .insert(PressedTimer::new(Duration::from_secs_f32(
                 styles.computed.delay.max(0.01),
             )))
@@ -398,70 +427,19 @@ impl<'w, 's> TemplateBuilder<'w, 's> {
                 styles.computed.delay.max(0.01),
             )));
 
-        // ---------------------
-        // shadow
-        if let Some(shadow) = styles.computed.shadow {
-            self.cmd.entity(entity).insert(shadow.clone());
-        }
-
-        if entity != self.scope {
-            self.cmd.entity(entity).insert(TemplateScope(self.scope));
+        //todo: do we still need this?
+        if entity != state.scope {
+            bundle.insert(TemplateScope(state.scope));
         }
 
         // ----------------------
-        //register prop listner
-        if node.uncompiled.len() > 0 {
-            self.cmd.entity(entity).insert(TemplateExpresions(
-                node.uncompiled.iter().cloned().collect(),
-            ));
-            self.subscriber.push(entity);
+        //tags
+        if tags.0.len() > 0 {
+            bundle.insert(tags);
         }
-
-        // ----------------------
-        // connections
-        if let Some(id) = &node.id {
-            self.ids.insert(id.clone(), entity);
-        }
-        if let Some(target) = &node.target {
-            self.targets.insert(entity, target.clone());
-        }
-
-        if let Some(watch) = &node.watch {
-            match self.watch.get_mut(watch) {
-                Some(list) => {
-                    list.push(entity);
-                }
-                None => {
-                    self.watch.insert(watch.clone(), vec![entity]);
-                }
-            };
-        }
-
-        // ----------------------
-        // events
-        node.event_listener.iter().for_each(|listener| {
-            listener.clone().self_insert(self.cmd.entity(entity));
-        });
-
-        // ----------------------
-        // dirty outline
-        if let Some(outline) = styles.computed.outline.as_ref() {
-            self.cmd.entity(entity).insert(outline.clone());
-        }
-
-        let mut tags = node.tags.clone();
 
         match &node.node_type {
-            // --------------------------------
-            // div node
-            NodeType::Node => {
-                self.cmd.entity(entity).insert((Node::default(), styles));
-            }
-            // --------------------------------
-            // spawn image
             NodeType::Image => {
-                let mut img = self.cmd.entity(entity);
-
                 let animation_option = build_animation(&styles);
                 let mut starting_frame = 0;
 
@@ -469,16 +447,20 @@ impl<'w, 's> TemplateBuilder<'w, 's> {
                     let animation = animation_option.unwrap();
                     starting_frame = animation.frame;
 
-                    img.insert(animation);
+                    bundle.insert(animation);
                 }
 
-                img.insert((
+                let mut img = Handle::<Image>::default();
+
+                if let Some(src) = &node.src {
+                    img = self.server.load(src);
+                } else if let Some(src) = path {
+                    img = self.server.load(src);
+                }
+
+                bundle.insert(
                     ImageNode {
-                        image: node
-                            .src
-                            .as_ref()
-                            .map(|path| self.server.load(path))
-                            .unwrap_or_default(),
+                        image: img,
                         image_mode: styles
                             .computed
                             .image_mode
@@ -500,92 +482,206 @@ impl<'w, 's> TemplateBuilder<'w, 's> {
                                 }
                             }),
                         ..default()
-                    },
-                    styles,
-                ));
-            }
-            // --------------------------------
-            // spawn image
-            NodeType::Text => {
-                let content = self
-                    .template
-                    .content
-                    .get(node.content_id)
-                    .map(|t| t.trim().to_string())
-                    .unwrap_or_default();
-
-                if is_templated(&content) {
-                    self.cmd.entity(entity).insert(ContentId(node.content_id));
-                    self.subscriber.push(entity);
-                }
-
-                self.cmd.entity(entity).insert((Text(content), styles));
-            }
-            // --------------------------------
-            // spawn button
-            NodeType::Button => {
-                self.cmd.entity(entity).insert((Button, styles));
-            }
-            NodeType::Custom(custom) => {
-                // mark children
-                self.comps.try_spawn(custom, entity, &mut self.cmd, &mut tags);
-                if node.children.len() > 0 {
-                    let slot_holder = self.cmd.spawn(Node::default()).id();
-                    for child_node in node.children.iter() {
-                        let child_entity = self.cmd.spawn_empty().id();
-                        self.build_node(child_entity, child_node);
-                        self.cmd.entity(slot_holder).add_child(child_entity);
                     }
+                );
+            }
+            NodeType::Text => {
+                match &node.content {
+                    Some(content) => {
+                        let (processed, count) = replace_placeholders(content.as_str(), state.properties);
 
-                    self.cmd
-                        .entity(entity)
-                        .insert((UnslotedChildren(slot_holder),));
+                        bundle.insert(Text(processed));
+
+                        if count > 0 {
+                            self.subscriber.push(entity);
+                        }
+                    }
+                    None => {
+                        bundle.insert(Text::default());
+                    }
                 }
-
-                self.cmd
-                    .entity(entity)
-                    .insert(TemplateProperties(node.defs.clone()));
-
-                if node.uncompiled.len() > 0 {
-                    self.subscriber.push(entity);
-                }
-
-                return;
             }
-            // --------------------------------
-            // spawn slot
-            NodeType::Slot => {
-                self.cmd
-                    .entity(entity)
-                    .insert((Node::default(), SlotPlaceholder { owner: self.scope }));
+            NodeType::Button => {
+                bundle.insert(Button);
             }
-            // --------------------------------
-            // don't render
-            NodeType::Template | NodeType::Property => {
-                return;
-            }
+            _ => {}
         };
 
-        // ----------------------
-        //tags
-        if tags.len() > 0 {
-            self.cmd.entity(entity).insert(Tags(tags));
+        // ---------------------
+        // shadow
+        if let Some(shadow) = styles.computed.shadow {
+            bundle.insert(shadow.clone());
         }
 
-        for child in node.children.iter() {
-            let child_entity = self.cmd.spawn_empty().id();
-            self.build_node(child_entity, child);
-            self.cmd.entity(entity).add_child(child_entity);
+        // ----------------------
+        // dirty outline
+        if let Some(outline) = styles.computed.outline.as_ref() {
+            bundle.insert(outline.clone());
+        }
+
+        //apply initial styling
+        bundle.insert((
+            TextFont {
+                font: styles.computed.font.clone(),
+                font_size: styles.computed.font_size,
+                ..Default::default()
+            },
+            TextColor(styles.computed.font_color),
+            BackgroundColor(styles.computed.background),
+            BorderRadius {
+                top_left: styles.computed.border_radius.top,
+                top_right: styles.computed.border_radius.right,
+                bottom_right: styles.computed.border_radius.bottom,
+                bottom_left: styles.computed.border_radius.left,
+            },
+            BorderColor(styles.computed.border_color),
+            styles,
+        ));
+    }
+
+    fn build_custom_node(&mut self, entity: Entity, custom: &str, node: &XNode) {
+        let Some(comp) = self.comps.get(custom) else {
+            error!("trying to spawn unregistered custom node `{custom}`");
+            return;
+        };
+
+        let Some(template) = self.assets.get(comp.asset_id) else {
+            error!("unable to find template for custom node `{custom}`");
+            return;
+        };
+
+        let mut properties = TemplateProperties::from(node.defs.clone());
+        
+        template.properties.iter().for_each(|(key, val)| {
+            _ = properties.try_insert(key.to_owned(), val.clone());
+        });
+
+        let mut state = TemplateBuilderState::new(entity, template, &node.children, &properties);
+
+        let Some(root) = template.root.first() else {
+            error!("custom node `{custom}` has no root node");
+            return;
+        };
+        
+        self.build_node(entity, root, &mut state);
+        self.finalize_relations(&state);
+    }
+
+    fn build_node_child(&mut self, entity: Entity, node: &XNode, state: &mut TemplateBuilderState) {
+        match node.node_type {
+            NodeType::Slot => {
+                match state.slottable_contents {
+                    Some(contents) => {
+                        contents.iter().for_each(|child| {
+                            self.build_node_child(entity, child, state);
+                        });
+                        
+                        state.slottable_contents = None;
+                    }
+                    None => {}
+                }
+            }
+            _ => {
+                let child_entity = self.cmd.spawn_empty().id();
+                self.build_node(child_entity, node, state);
+                self.cmd.entity(entity).add_child(child_entity);
+            }
+        }
+    }
+
+    fn build_node(&mut self, entity: Entity, node: &XNode, state: &mut TemplateBuilderState) {
+        match node.node_type {
+            NodeType::Custom(ref custom) => {
+                self.build_custom_node(entity, custom, node);
+            }
+            NodeType::Slot => {
+                warn!("slot node should not be present in the root of a template");
+            }
+            _ => {
+                //ADDRESS THIS STUFF!!!!!!!!!!
+        
+                // ----------------------
+                //register prop listner
+                if node.uncompiled.len() > 0 {
+                    self.cmd.entity(entity).insert(TemplateExpresions(
+                        node.uncompiled.iter().cloned().collect(),
+                    ));
+                    self.subscriber.push(entity);
+                }
+        
+                // ----------------------
+                // connections
+                if let Some(id) = &node.id {
+                    state.ids.insert(id.clone(), entity);
+                }
+                if let Some(target) = &node.target {
+                    state.targets.insert(entity, target.clone());
+                }
+        
+                if let Some(watch) = &node.watch {
+                    match state.watch.get_mut(watch) {
+                        Some(list) => {
+                            list.push(entity);
+                        }
+                        None => {
+                            state.watch.insert(watch.clone(), vec![entity]);
+                        }
+                    };
+                }
+
+                self.build_basic_node(entity, node, state);
+
+                for child in node.children.iter() {
+                    self.build_node_child(entity, child, state);
+                }
+                
+                // ----------------------
+                // events
+                node.event_listener.iter().for_each(|listener| {
+                    listener.clone().self_insert(self.cmd.entity(entity));
+                });
+            }
         }
     }
 }
 
-//@todo:dirty AF
-pub fn is_templated(input: &str) -> bool {
-    let parts: Result<(&str, (&str, &str)), nom::Err<nom::error::Error<&str>>> = tuple((
-        take_until("{"),
-        delimited(tag("{"), preceded(multispace0, is_not("}")), tag("}")),
-    ))(input);
+fn extract_all_placeholders(input: &str) -> IResult<&str, Vec<(&str, &str)>> {
+    many0(
+        tuple((
+            take_until("{"),
+            delimited(tag("{"), preceded(multispace0, is_not("}")), tag("}")),
+        ))
+    )(input)
+}
 
-    parts.is_ok()
+fn replace_placeholders(input: &str, replacements: &HashMap<String, String>) -> (String, u8) {
+    let mut result = String::new();
+    let mut remaining = input;
+    let mut count: u8 = 0;
+
+    match extract_all_placeholders(input) {
+        Ok((rest, matches)) => {
+            count = matches.len() as u8;
+
+            for (before, key) in matches {
+                result.push_str(before);
+                
+                if let Some(value) = replacements.get(key) {
+                    result.push_str(value);
+                } else {
+                    result.push_str(&format!("{{{}}}", key));
+                }
+                remaining = rest;
+            }
+        }
+        Err(_) => {
+            // If parsing fails, return the original string
+            result.push_str(input);
+        }
+    }
+
+    // Append any remaining text after the last match
+    result.push_str(remaining);
+
+    (result.trim().to_string(), count)
 }

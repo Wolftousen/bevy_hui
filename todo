@@ -1,0 +1,12 @@
+* When parsing, change the XNode tree to be a flat array
+    This will allow us to create a `Defered` tag that only needs to store an index into the array to know where to continue from
+    The XNode will need to know when to branch and unbranch
+
+* Create observable values
+    When a node uses {} that node needs to be notified when the value changes
+    The node observing the value needs:
+        1. An Observer component with the id of the value being observed
+    When something wants to allow a value to be observed it needs to create
+        1. Create a new Entity with an Observed compenent with the id of the value being observed and it's new value
+
+* Resouce for tracking id'd nodes

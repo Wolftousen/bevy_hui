@@ -123,10 +123,18 @@ where
     let (_, node_type) = parse_node_type(xml.name)?;
     xnode.node_type = node_type;
 
+    if let Some(bytes) = xml.value {
+        let value = String::from_utf8_lossy(bytes).to_string();
+        xnode.content = Some(value);
+    }
+
+    //still need this?
     xnode.content_id = xml
         .value
         .map(|bytes| String::from_utf8_lossy(bytes).to_string())
-        .map(|raw| content_map.insert(raw))
+        .map(|raw| {
+            content_map.insert(raw)
+        })
         .unwrap_or_default();
 
     for attr in xml.attributes.iter() {

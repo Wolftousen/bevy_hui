@@ -27,7 +27,7 @@ impl Plugin for BindingPlugin {
 #[derive(Event)]
 pub struct UiChangedEvent;
 
-pub type SpawnFunction = dyn Fn(EntityCommands, &mut HashMap<String, String>) + Send + Sync + 'static;
+pub type SpawnFunction = dyn Fn(EntityCommands) + Send + Sync + 'static;
 
 #[derive(SystemParam)]
 pub struct HtmlFunctions<'w, 's> {
@@ -53,7 +53,9 @@ pub struct HtmlComponents<'w> {
 impl<'w> HtmlComponents<'w> {
     /// link any custom html node to your template
     pub fn register(&mut self, name: impl Into<String>, template: Handle<HtmlTemplate>) {
-        self.comps.register(name, move |mut cmd, _| {
+        let asset_id = template.id();
+
+        self.comps.register(name, asset_id, move |mut cmd| {
             cmd.insert(HtmlNode(template.clone()));
         });
     }
@@ -66,13 +68,20 @@ impl<'w> HtmlComponents<'w> {
         template: Handle<HtmlTemplate>,
         func: SF,
     ) where
-        SF: Fn(EntityCommands, &mut HashMap<String, String>) + Send + Sync + 'static,
+        SF: Fn(EntityCommands) + Send + Sync + 'static,
     {
-        self.comps.register(name, move |mut cmd, tags| {
+        let asset_id = template.id();
+
+        self.comps.register(name, asset_id, move |mut cmd, | {
             cmd.insert(HtmlNode(template.clone()));
-            func(cmd, tags);
+            func(cmd);
         });
     }
+}
+
+pub struct ComponentBinding {
+    spawn_fn: Box<SpawnFunction>,
+    pub asset_id: AssetId<HtmlTemplate>,
 }
 
 /// # Register custom node tags
@@ -82,22 +91,25 @@ impl<'w> HtmlComponents<'w> {
 /// ComponenRegistry.register("my_comp", &|mut cmd: EntityCommands| cmd.insert(MyBundle::default()))
 /// `
 #[derive(Resource, Default, Deref, DerefMut)]
-pub struct ComponentBindings(HashMap<String, Box<SpawnFunction>>);
+pub struct ComponentBindings(HashMap<String, ComponentBinding>);
 
 impl ComponentBindings {
-    pub fn register<F>(&mut self, key: impl Into<String>, f: F)
+    pub fn register<F>(&mut self, key: impl Into<String>, asset_id: AssetId<HtmlTemplate>, f: F)
     where
-        F: Fn(EntityCommands, &mut HashMap<String, String>) + Send + Sync + 'static,
+        F: Fn(EntityCommands) + Send + Sync + 'static,
     {
         let key: String = key.into();
-        self.insert(key, Box::new(f));
+        self.insert(key, ComponentBinding {
+            asset_id,
+            spawn_fn: Box::new(f),
+        });
     }
 
-    pub fn try_spawn(&self, key: &String, entity: Entity, cmd: &mut Commands, tags: &mut HashMap<String, String>) {
+    pub fn try_spawn(&self, key: &String, entity: Entity, cmd: &mut Commands) {
         self.get(key)
             .map(|f| {
                 let cmd = cmd.entity(entity);
-                f(cmd, tags);
+                (f.spawn_fn)(cmd);
             })
             .unwrap_or_else(|| warn!("custom tag `{key}` is not bound"));
     }

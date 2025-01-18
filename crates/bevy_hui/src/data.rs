@@ -31,6 +31,7 @@ pub struct XNode {
     pub watch: Option<String>,
     pub id: Option<String>,
     pub name: Option<String>,
+    pub content: Option<String>,
     pub uncompiled: Vec<AttrTokens>,
     pub tags: HashMap<String, String>,
     pub defs: HashMap<String, String>,

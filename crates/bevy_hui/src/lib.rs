@@ -2,20 +2,20 @@
 #![allow(rustdoc::redundant_explicit_links)]
 #![doc = include_str!("../../../README.md")]
 
-use bevy::{app::{App, Plugin, Update}, prelude::{ImageNode, Query, Res}, time::Time};
+use bevy::app::{App, Plugin, Update};
 use animation::run_animations;
 
 mod animation;
 mod auto;
 mod bindings;
 mod build;
-mod compile;
 mod data;
 mod error;
 mod load;
 mod parse;
 mod styles;
 mod util;
+mod observation;
 
 pub mod prelude {
     pub use crate::auto::{AutoLoadState, HuiAutoLoadPlugin};
@@ -26,7 +26,6 @@ pub mod prelude {
         HtmlNode, OnUiChange, OnUiEnter, OnUiExit, OnUiPress, OnUiSpawn, Tags, TemplateProperties,
         TemplateScope, UiId, UiTarget, UiWatch,
     };
-    pub use crate::compile::{CompileContextEvent, CompileNodeEvent};
     pub use crate::data::{Action, Attribute, HtmlTemplate, NodeType, StyleAttr};
     pub use crate::error::ParseError;
     pub use crate::error::VerboseHtmlError;
@@ -42,7 +41,6 @@ impl Plugin for HuiPlugin {
             build::BuildPlugin,
             bindings::BindingPlugin,
             styles::TransitionPlugin,
-            compile::CompilePlugin,
         )).add_systems(Update, run_animations);
     }
 }
