@@ -1,4 +1,6 @@
 use bevy::{prelude::*, text::FontSmoothing};
+use crate::prelude::HuiObservableType;
+
 use super::super::{HuiObservationEvent, HuiObservationValue};
 
 pub struct HuiFontSmoothing;
@@ -12,7 +14,16 @@ impl HuiObservationEvent<HuiFontSmoothing> {
     }
 }
 
-pub fn observe_font(
+impl HuiObservableType for HuiFontSmoothing {
+    fn observe(
+        &self,
+        entity_commands: &mut EntityCommands,
+    ) {
+        entity_commands.observe(observe_font_smoothing);
+    }
+}
+
+pub fn observe_font_smoothing(
     trigger: Trigger<HuiObservationEvent<HuiFontSmoothing>>,
     mut query: Query<&mut TextFont>,
 ) {

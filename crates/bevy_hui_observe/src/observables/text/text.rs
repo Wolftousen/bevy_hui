@@ -1,4 +1,6 @@
 use bevy::prelude::*;
+use crate::prelude::HuiObservableType;
+
 use super::super::{HuiObservationEvent, HuiObservationValue};
 
 pub struct HuiText;
@@ -12,11 +14,22 @@ impl HuiObservationEvent<HuiText> {
     }
 }
 
+impl HuiObservableType for HuiText {
+    fn observe(
+        &self,
+        entity_commands: &mut EntityCommands,
+    ) {
+        entity_commands.observe(observe_text);
+    }
+}
+
 pub fn observe_text(
     trigger: Trigger<HuiObservationEvent<HuiText>>,
     mut query: Query<&mut Text>,
 ) {
+    println!("observing text");
     let Ok(mut comp) = query.get_mut(trigger.entity()) else {
+        println!("failed to get text component");
         return;
     };
 

@@ -1,4 +1,6 @@
 use bevy::prelude::*;
+use crate::prelude::HuiObservableType;
+
 use super::super::{HuiObservationEvent, HuiObservationValue};
 
 pub struct HuiFlexWrap;
@@ -9,6 +11,15 @@ impl HuiObservationEvent<HuiFlexWrap> {
             _marker: core::marker::PhantomData,
             value: HuiObservationValue::FlexWrap(value.clone()),
         }
+    }
+}
+
+impl HuiObservableType for HuiFlexWrap {
+    fn observe(
+        &self,
+        entity_commands: &mut EntityCommands,
+    ) {
+        entity_commands.observe(observe_flex_wrap);
     }
 }
 

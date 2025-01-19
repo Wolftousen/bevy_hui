@@ -1,4 +1,6 @@
 use bevy::prelude::*;
+use crate::prelude::HuiObservableType;
+
 use super::super::{HuiObservationEvent, HuiObservationValue};
 
 pub struct HuiJustifyContent;
@@ -9,6 +11,15 @@ impl HuiObservationEvent<HuiJustifyContent> {
             _marker: core::marker::PhantomData,
             value: HuiObservationValue::JustifyContent(value.clone()),
         }
+    }
+}
+
+impl HuiObservableType for HuiJustifyContent {
+    fn observe(
+        &self,
+        entity_commands: &mut EntityCommands,
+    ) {
+        entity_commands.observe(observe_justify_content);
     }
 }
 

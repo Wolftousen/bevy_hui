@@ -1,11 +1,9 @@
 use bevy::{
-    image::ImageSamplerDescriptor,
-    input::mouse::MouseWheel,
-    prelude::*,
-    remote::{http::RemoteHttpPlugin, RemotePlugin},
+    image::ImageSamplerDescriptor, input::mouse::MouseWheel, log::tracing_subscriber::fmt::format, prelude::*, remote::{http::RemoteHttpPlugin, RemotePlugin}
 };
 use bevy_aseprite_ultra::prelude::*;
 use bevy_hui::prelude::*;
+use bevy_hui_observe::prelude::{HuiObservationEvent, HuiPropertyWatchers, HuiText};
 
 fn main() {
     App::new()
@@ -85,7 +83,7 @@ fn setup(
     html_funcs.register(
         "debug",
         |In(entity),
-         mut cmd: Commands,
+         _: Commands,
          mut template_props: Query<&mut TemplateProperties>,
          scopes: Query<&TemplateScope>| {
             let Ok(scope) = scopes.get(entity) else {
@@ -97,6 +95,7 @@ fn setup(
             };
 
             let rng = rand::random::<u32>();
+
             props.insert("title".to_string(), format!("{}", rng));
         },
     );

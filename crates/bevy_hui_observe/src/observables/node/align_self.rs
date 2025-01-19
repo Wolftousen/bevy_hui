@@ -1,4 +1,6 @@
 use bevy::prelude::*;
+use crate::prelude::HuiObservableType;
+
 use super::super::{HuiObservationEvent, HuiObservationValue};
 
 pub struct HuiAlignSelf;
@@ -9,6 +11,15 @@ impl HuiObservationEvent<HuiAlignSelf> {
             _marker: core::marker::PhantomData,
             value: HuiObservationValue::AlignSelf(value.clone()),
         }
+    }
+}
+
+impl HuiObservableType for HuiAlignSelf {
+    fn observe(
+        &self,
+        entity_commands: &mut EntityCommands,
+    ) {
+        entity_commands.observe(observe_align_self);
     }
 }
 

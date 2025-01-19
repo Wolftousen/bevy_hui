@@ -1,4 +1,6 @@
 use bevy::prelude::*;
+use crate::prelude::HuiObservableType;
+
 use super::super::{HuiObservationEvent, HuiObservationValue};
 
 pub struct HuiScrollPositionX;
@@ -9,6 +11,15 @@ impl HuiObservationEvent<HuiScrollPositionX> {
             _marker: core::marker::PhantomData,
             value: HuiObservationValue::F32(value),
         }
+    }
+}
+
+impl HuiObservableType for HuiScrollPositionX {
+    fn observe(
+        &self,
+        entity_commands: &mut EntityCommands,
+    ) {
+        entity_commands.observe(observe_scroll_position_x);
     }
 }
 

@@ -4,6 +4,7 @@
 
 use bevy::app::{App, Plugin, Update};
 use animation::run_animations;
+use bevy_hui_observe::HuiObservePlugin;
 
 mod animation;
 mod auto;
@@ -15,7 +16,6 @@ mod load;
 mod parse;
 mod styles;
 mod util;
-mod observation;
 
 pub mod prelude {
     pub use crate::auto::{AutoLoadState, HuiAutoLoadPlugin};
@@ -24,7 +24,7 @@ pub mod prelude {
     };
     pub use crate::build::{
         HtmlNode, OnUiChange, OnUiEnter, OnUiExit, OnUiPress, OnUiSpawn, Tags, TemplateProperties,
-        TemplateScope, UiId, UiTarget, UiWatch,
+        TemplateScope, UiId, UiTarget, UiWatch, HuiId,
     };
     pub use crate::data::{Action, Attribute, HtmlTemplate, NodeType, StyleAttr};
     pub use crate::error::ParseError;

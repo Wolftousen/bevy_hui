@@ -29,8 +29,7 @@ pub enum HuiObservationValue {
 }
 
 pub trait HuiObservableType: Sync + Send + 'static {
-    fn observe(entity_commands: &mut EntityCommands)
-    where Self: Sized;
+    fn observe(&self, entity_commands: &mut EntityCommands);
 }
 
 #[derive(Event)]
@@ -40,8 +39,13 @@ pub struct HuiObservationEvent<T> {
 }
 
 //start mods
-pub mod image;
-pub mod node;
-pub mod observable;
-pub mod text;
+mod image;
+mod node;
+mod observable;
+mod text;
 //end mods
+
+pub use image::*;
+pub use node::*;
+pub use observable::*;
+pub use text::*;

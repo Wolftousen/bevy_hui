@@ -35,6 +35,9 @@ impl Plugin for BuildPlugin {
     }
 }
 
+#[derive(Component, Debug, Deref, DerefMut)]
+pub struct HuiId(pub String);
+
 #[derive(Component, Deref, DerefMut)]
 pub struct TemplateContent(pub String);
 
@@ -209,7 +212,7 @@ struct KeepComps {
 
 fn spawn_ui(
     mut cmd: Commands,
-    mut unbuild: Query<(Entity, &HtmlNode, &mut TemplateProperties), Without<FullyBuild>>,
+    mut unbuild: Query<(Entity, &HtmlNode, &mut TemplateProperties, &HuiId), Without<FullyBuild>>,
     assets: Res<Assets<HtmlTemplate>>,
     server: Res<AssetServer>,
     mut texture_atlases: ResMut<Assets<TextureAtlasLayout>>,
@@ -217,7 +220,7 @@ fn spawn_ui(
 ) {
     unbuild
         .iter_mut()
-        .for_each(|(root_entity, handle, mut properties)| {
+        .for_each(|(root_entity, handle, mut properties, id)| {
             let Some(template) = assets.get(&**handle) else {
                 return;
             };
@@ -379,15 +382,17 @@ impl<'w, 's> TemplateBuilder<'w, 's> {
 
     fn fill_attr_tokens(&mut self, entity: Entity, node: &XNode, properties: &TemplateProperties, style: &mut HtmlStyle, tags: &mut Tags) -> Option<String> {
         let mut path: Option<String> = None;
+        let mut entity_commands = self.cmd.entity(entity);
 
         for attr in node.uncompiled.iter() {
+
             if let Some(attr) = attr.compile(properties) {
                 match attr {
                     Attribute::Style(style_attr) => {
                         style.add_style_attr(style_attr);
                     }
                     Attribute::Action(action) => {
-                        action.self_insert(self.cmd.entity(entity))
+                        action.self_insert(&mut entity_commands)
                     }
                     Attribute::Path(p) => {
                         path = Some(p);
@@ -488,11 +493,11 @@ impl<'w, 's> TemplateBuilder<'w, 's> {
             NodeType::Text => {
                 match &node.content {
                     Some(content) => {
-                        let (processed, count) = replace_placeholders(content.as_str(), state.properties);
+                        let (processed, replaced) = replace_placeholders(content.as_str(), state.properties);
 
                         bundle.insert(Text(processed));
 
-                        if count > 0 {
+                        for key in replaced.iter() {
                             self.subscriber.push(entity);
                         }
                     }
@@ -638,7 +643,8 @@ impl<'w, 's> TemplateBuilder<'w, 's> {
                 // ----------------------
                 // events
                 node.event_listener.iter().for_each(|listener| {
-                    listener.clone().self_insert(self.cmd.entity(entity));
+                    let mut entity_builder = self.cmd.entity(entity);
+                    listener.clone().self_insert(&mut entity_builder);
                 });
             }
         }
@@ -654,20 +660,19 @@ fn extract_all_placeholders(input: &str) -> IResult<&str, Vec<(&str, &str)>> {
     )(input)
 }
 
-fn replace_placeholders(input: &str, replacements: &HashMap<String, String>) -> (String, u8) {
+fn replace_placeholders(input: &str, replacements: &HashMap<String, String>) -> (String, Vec<String>) {
     let mut result = String::new();
     let mut remaining = input;
-    let mut count: u8 = 0;
+    let mut replaced_keys = Vec::new();
 
     match extract_all_placeholders(input) {
         Ok((rest, matches)) => {
-            count = matches.len() as u8;
-
             for (before, key) in matches {
                 result.push_str(before);
-                
+
                 if let Some(value) = replacements.get(key) {
                     result.push_str(value);
+                    replaced_keys.push(key.to_string());
                 } else {
                     result.push_str(&format!("{{{}}}", key));
                 }
@@ -683,5 +688,5 @@ fn replace_placeholders(input: &str, replacements: &HashMap<String, String>) -> 
     // Append any remaining text after the last match
     result.push_str(remaining);
 
-    (result.trim().to_string(), count)
+    (result.trim().to_string(), replaced_keys)
 }

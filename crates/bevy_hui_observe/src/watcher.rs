@@ -6,14 +6,28 @@ use bevy::{prelude::*, utils::HashMap};
 pub struct HuiPropertyWatchers(HashMap<String, Vec<Entity>>);
 
 impl HuiPropertyWatchers {
-    fn register(&mut self, key: impl Into<String>, value: Entity) {
+    pub fn register_property(&mut self, key: impl Into<String>) {
+        let key = key.into();
+        match self.0.get_mut(&key) {
+            Some(_) => {}
+            None => {
+                self.0.insert(key, Vec::new());
+            }
+        }
+    }
+
+    pub fn register_entity(&mut self, key: impl Into<String>, value: Entity) {
         let key = key.into();
 
         match self.0.get_mut(&key) {
-            Some(v) => v.push(value),
-            None => {
-                self.0.insert(key, vec![value]);
+            Some(v) => {
+                v.push(value)
             }
+            None => {}
         }
+    }
+
+    pub fn get(&self, key: impl Into<String>) -> Option<&Vec<Entity>> {
+        self.0.get(&key.into())
     }
 }

@@ -746,6 +746,7 @@ name = "bevy_hui"
 version = "0.2.1"
 dependencies = [
  "bevy",
+ "bevy_hui_observe",
  "nom",
  "owo-colors",
  "test-case",
@@ -2031,6 +2032,7 @@ dependencies = [
  "bevy",
  "bevy_aseprite_ultra",
  "bevy_hui",
+ "bevy_hui_observe",
  "bevy_hui_widgets",
  "maud",
  "rand",

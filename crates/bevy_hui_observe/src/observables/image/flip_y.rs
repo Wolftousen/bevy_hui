@@ -1,4 +1,6 @@
 use bevy::prelude::*;
+use crate::prelude::HuiObservableType;
+
 use super::super::{HuiObservationEvent, HuiObservationValue};
 
 pub struct HuiFlipY;
@@ -9,6 +11,15 @@ impl HuiObservationEvent<HuiFlipY> {
             _marker: core::marker::PhantomData,
             value: HuiObservationValue::Bool(value),
         }
+    }
+}
+
+impl HuiObservableType for HuiFlipY {
+    fn observe(
+        &self,
+        entity_commands: &mut EntityCommands,
+    ) {
+        entity_commands.observe(observe_flip_y);
     }
 }
 

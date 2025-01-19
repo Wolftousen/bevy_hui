@@ -1,7 +1,13 @@
 //start mods
-pub mod color;
-pub mod flip_x;
-pub mod flip_y;
-pub mod image;
-pub mod mode;
+mod color;
+mod flip_x;
+mod flip_y;
+mod image;
+mod mode;
 //end mods
+
+pub use color::*;
+pub use flip_x::*;
+pub use flip_y::*;
+pub use image::*;
+pub use mode::*;

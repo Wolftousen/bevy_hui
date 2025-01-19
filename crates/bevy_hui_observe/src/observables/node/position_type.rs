@@ -1,4 +1,6 @@
 use bevy::prelude::*;
+use crate::prelude::HuiObservableType;
+
 use super::super::{HuiObservationEvent, HuiObservationValue};
 
 pub struct HuiPositionType;
@@ -9,6 +11,15 @@ impl HuiObservationEvent<HuiPositionType> {
             _marker: core::marker::PhantomData,
             value: HuiObservationValue::PositionType(value.clone()),
         }
+    }
+}
+
+impl HuiObservableType for HuiPositionType {
+    fn observe(
+        &self,
+        entity_commands: &mut EntityCommands,
+    ) {
+        entity_commands.observe(observe_position_type);
     }
 }
 

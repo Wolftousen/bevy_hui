@@ -7,6 +7,7 @@ edition = "2021"
 bevy = { version = "0.15", features = ["file_watcher", "multi_threaded", "bevy_remote"] }
 bevy_aseprite_ultra = { path = "../../bevy_aseprite_ultra" }
 bevy_hui = { path = "../crates/bevy_hui" }
+bevy_hui_observe = { path = "../crates/bevy_hui_observe" }
 bevy_hui_widgets = { path = "../crates/bevy_hui_widgets" }
 maud = "0.26.0"
 rand = "0.8.5"

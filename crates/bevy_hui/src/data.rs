@@ -117,7 +117,7 @@ pub enum Action {
 }
 
 impl Action {
-    pub fn self_insert(self, mut cmd: EntityCommands) {
+    pub fn self_insert(self, cmd: &mut EntityCommands) {
         match self {
             Action::OnPress(fn_id) => {
                 cmd.insert(crate::prelude::OnUiPress(fn_id));

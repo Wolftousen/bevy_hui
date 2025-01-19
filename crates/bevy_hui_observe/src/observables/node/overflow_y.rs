@@ -1,4 +1,6 @@
 use bevy::prelude::*;
+use crate::prelude::HuiObservableType;
+
 use super::super::{HuiObservationEvent, HuiObservationValue};
 
 pub struct HuiOverflowY;
@@ -9,6 +11,15 @@ impl HuiObservationEvent<HuiOverflowY> {
             _marker: core::marker::PhantomData,
             value: HuiObservationValue::Overflow(value.clone()),
         }
+    }
+}
+
+impl HuiObservableType for HuiOverflowY {
+    fn observe(
+        &self,
+        entity_commands: &mut EntityCommands,
+    ) {
+        entity_commands.observe(observe_overflow_y);
     }
 }
 

@@ -16,6 +16,7 @@ impl HuiObservationEvent<HuiImageColor> {
 
 impl HuiObservableType for HuiImageColor {
     fn observe(
+        &self,
         entity_commands: &mut EntityCommands,
     ) {
         entity_commands.observe(observe_image_color);

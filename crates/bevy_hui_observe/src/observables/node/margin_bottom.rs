@@ -1,4 +1,6 @@
 use bevy::prelude::*;
+use crate::prelude::HuiObservableType;
+
 use super::super::{HuiObservationEvent, HuiObservationValue};
 
 pub struct HuiMarginBottom;
@@ -9,6 +11,15 @@ impl HuiObservationEvent<HuiMarginBottom> {
             _marker: core::marker::PhantomData,
             value: HuiObservationValue::Val(value.clone()),
         }
+    }
+}
+
+impl HuiObservableType for HuiMarginBottom {
+    fn observe(
+        &self,
+        entity_commands: &mut EntityCommands,
+    ) {
+        entity_commands.observe(observe_margin_bottom);
     }
 }
 
