@@ -6,25 +6,29 @@
 
 * Observing Template Properties
     * When a property changes I need the following:
-        * TemplateProperties
+        * TemplateProperties(HashMap<String, TemplateProperty>)
 
-    * TemplateProperties should be updated
-        Add fields
-            * Subscribers: HashMap<String, Subscriber>
-                A Hash of entities that are subscribed to events
-                The key should be the field name that is being changed: 'text', 'display', etc....
-                Subscriber should include
-                    * Entity: Entity
-                        Entity that is subscribing to the event
-                    * TemplateNodeIndex: number
-                        What index into the HtmlTemplate XNode array this entity originated from
-        Add functions
-            * update<T>(key: impl Into<String>, T: value, cmd: &mut Commands)
-                * update the underlying HashMap to have the new value
-                * Check if there are subscribers to this key
-                    * Look up the Subscribers for that property
-                    * For each Subscriber
-                        * Look up the XNode from the HtmlTemplate
-                        * Reprocess the value
-                        * Look up the trigger type
-                        * trigger the observer
+    * TemplateProperty should be a struct containing
+        * value: String
+        * subscribers: Vec<Subscriber>
+            A Hash of entities that are subscribed to events
+            Subscriber should include
+                * field: String
+                    This should be the field name that is being changed: 'text', 'display', etc....
+                * entity: Entity
+                    Entity that is subscribing to the event
+                * template_node_index: number
+                    What index into the HtmlTemplate XNode array this entity originated from
+                * template_property_index: number
+                    What index of the XNode templated properties is this tied too
+
+        Add functions to TemplateProperties
+            * update<T>(&mut self, key: impl Into<String>, T: value, cmd: &mut Commands)
+                * look up the TemplateProperty given the key
+                * update the TemplateProperty value
+                * loop over the TemplateProperty.subscribers
+                * For each Subscriber
+                    * Look up the XNode from the HtmlTemplate
+                    * Reprocess the value
+                    * Look up the trigger type
+                    * trigger the observer
