@@ -3,3 +3,28 @@
     The XNode will need to know when to branch and unbranch
 
 * Resouce for tracking id'd nodes
+
+* Observing Template Properties
+    * When a property changes I need the following:
+        * TemplateProperties
+
+    * TemplateProperties should be updated
+        Add fields
+            * Subscribers: HashMap<String, Subscriber>
+                A Hash of entities that are subscribed to events
+                The key should be the field name that is being changed: 'text', 'display', etc....
+                Subscriber should include
+                    * Entity: Entity
+                        Entity that is subscribing to the event
+                    * TemplateNodeIndex: number
+                        What index into the HtmlTemplate XNode array this entity originated from
+        Add functions
+            * update<T>(key: impl Into<String>, T: value, cmd: &mut Commands)
+                * update the underlying HashMap to have the new value
+                * Check if there are subscribers to this key
+                    * Look up the Subscribers for that property
+                    * For each Subscriber
+                        * Look up the XNode from the HtmlTemplate
+                        * Reprocess the value
+                        * Look up the trigger type
+                        * trigger the observer
